@@ -15,7 +15,7 @@ class DoubleSortEvenOddBatcherSEQ : public BaseTask {
   static constexpr ppc::task::TypeOfTask GetStaticTypeOfTask() {
     return ppc::task::TypeOfTask::kSEQ;
   }
-  explicit DoubleSortEvenOddBatcherSEQ(const InType& in);
+  explicit DoubleSortEvenOddBatcherSEQ(const InType &in);
 
  private:
   bool ValidationImpl() override;

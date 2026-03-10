@@ -12,7 +12,7 @@
 namespace gusev_d_double_sort_even_odd_batcher_task_threads {
 namespace {
 
-OutType RunTask(const InType& input) {
+OutType RunTask(const InType &input) {
   DoubleSortEvenOddBatcherSEQ task(input);
   EXPECT_TRUE(task.Validation());
   EXPECT_TRUE(task.PreProcessing());
@@ -21,13 +21,13 @@ OutType RunTask(const InType& input) {
   return task.GetOutput();
 }
 
-void CheckSortedPermutation(const InType& input, const OutType& output) {
+void CheckSortedPermutation(const InType &input, const OutType &output) {
   ASSERT_EQ(output.size(), input.size());
   EXPECT_TRUE(std::is_sorted(output.begin(), output.end()));
   EXPECT_TRUE(std::is_permutation(output.begin(), output.end(), input.begin(), input.end()));
 }
 
-void CheckMatchesStdSort(const InType& input, const OutType& output) {
+void CheckMatchesStdSort(const InType &input, const OutType &output) {
   auto expected = input;
   std::sort(expected.begin(), expected.end());
   EXPECT_EQ(output, expected);
@@ -37,7 +37,7 @@ InType GenerateRandomInput(size_t size, uint64_t seed) {
   std::mt19937_64 gen(seed);
   std::uniform_real_distribution<double> dist(-1000000.0, 1000000.0);
   InType data(size);
-  for (double& value : data) {
+  for (double &value : data) {
     value = dist(gen);
   }
   return data;
@@ -198,8 +198,8 @@ TEST(GusevDoubleSortEvenOddBatcherSEQ, SortsPrimeSizeDeterministicRandomAndMatch
 
 TEST(GusevDoubleSortEvenOddBatcherSEQ, SortsInterleavedLargeAndTinyMagnitudes) {
   const InType input{
-      1.0e308,   -1.0e308,  1.0e-308, -1.0e-308, 5.0e307,   -5.0e307,  7.5e-309, -7.5e-309,
-      3.1415926, -2.7182818, 0.0,     -0.0,      42.0,      -42.0,     9.0e307,  -9.0e307,
+      1.0e308,   -1.0e308,   1.0e-308, -1.0e-308, 5.0e307, -5.0e307, 7.5e-309, -7.5e-309,
+      3.1415926, -2.7182818, 0.0,      -0.0,      42.0,    -42.0,    9.0e307,  -9.0e307,
   };
   const auto output = RunTask(input);
   CheckMatchesStdSort(input, output);

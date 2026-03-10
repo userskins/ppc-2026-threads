@@ -12,7 +12,7 @@ namespace gusev_d_double_sort_even_odd_batcher_task_threads {
 
 class PerfTestBaseSEQ : public ppc::util::BaseRunPerfTests<InType, OutType> {
  protected:
-  bool CheckTestOutputData(OutType& output_data) final {
+  bool CheckTestOutputData(OutType &output_data) final {
     auto expected = input_data_;
     std::sort(expected.begin(), expected.end());
     return output_data == expected;
@@ -22,7 +22,7 @@ class PerfTestBaseSEQ : public ppc::util::BaseRunPerfTests<InType, OutType> {
     return input_data_;
   }
 
-  void SetPerfAttributes(ppc::performance::PerfAttr& perf_attrs) override {
+  void SetPerfAttributes(ppc::performance::PerfAttr &perf_attrs) override {
     const auto start = std::chrono::high_resolution_clock::now();
     perf_attrs.current_timer = [start] {
       const auto now = std::chrono::high_resolution_clock::now();
@@ -51,7 +51,7 @@ class RunPerfTestSEQRandom : public PerfTestBaseSEQ {
     input_data_.resize(3000);
     std::mt19937_64 gen(20260308);
     std::uniform_real_distribution<double> dist(-1000000.0, 1000000.0);
-    for (double& value : input_data_) {
+    for (double &value : input_data_) {
       value = dist(gen);
     }
   }
@@ -86,8 +86,8 @@ TEST_P(RunPerfTestSEQNearlySorted, RunPerfModes) {
 
 namespace {
 
-const auto kAllPerfTasks = ppc::util::MakeAllPerfTasks<InType, DoubleSortEvenOddBatcherSEQ>(
-    PPC_SETTINGS_gusev_d_double_sort_even_odd_batcher);
+const auto kAllPerfTasks =
+    ppc::util::MakeAllPerfTasks<InType, DoubleSortEvenOddBatcherSEQ>(PPC_SETTINGS_gusev_d_double_sort_even_odd_batcher);
 
 const auto kGtestValues = ppc::util::TupleToGTestValues(kAllPerfTasks);
 

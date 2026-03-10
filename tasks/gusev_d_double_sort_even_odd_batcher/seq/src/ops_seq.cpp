@@ -16,14 +16,14 @@ uint64_t DoubleToSortableKey(double value) {
   return (bits & sign_mask) == 0 ? (bits ^ sign_mask) : (~bits);
 }
 
-void RadixSortDoubles(std::vector<double>& data) {
+void RadixSortDoubles(std::vector<double> &data) {
   if (data.size() < 2) {
     return;
   }
 
   std::vector<double> buffer(data.size());
-  std::vector<double>* src = &data;
-  std::vector<double>* dst = &buffer;
+  std::vector<double> *src = &data;
+  std::vector<double> *dst = &buffer;
 
   for (int byte = 0; byte < 8; ++byte) {
     std::array<size_t, 256> count{};
@@ -35,7 +35,7 @@ void RadixSortDoubles(std::vector<double>& data) {
     }
 
     size_t prefix = 0;
-    for (size_t& bucket_count : count) {
+    for (size_t &bucket_count : count) {
       const size_t current = bucket_count;
       bucket_count = prefix;
       prefix += current;
@@ -54,7 +54,7 @@ void RadixSortDoubles(std::vector<double>& data) {
   }
 }
 
-std::vector<double> MergeBatcherEvenOdd(const std::vector<double>& left, const std::vector<double>& right) {
+std::vector<double> MergeBatcherEvenOdd(const std::vector<double> &left, const std::vector<double> &right) {
   const size_t total_size = left.size() + right.size();
   std::vector<double> left_even;
   std::vector<double> left_odd;
@@ -115,7 +115,7 @@ std::vector<double> MergeBatcherEvenOdd(const std::vector<double>& left, const s
 
 namespace gusev_d_double_sort_even_odd_batcher_task_threads {
 
-DoubleSortEvenOddBatcherSEQ::DoubleSortEvenOddBatcherSEQ(const InType& in) {
+DoubleSortEvenOddBatcherSEQ::DoubleSortEvenOddBatcherSEQ(const InType &in) {
   SetTypeOfTask(GetStaticTypeOfTask());
   GetInput() = in;
   GetOutput() = {};
