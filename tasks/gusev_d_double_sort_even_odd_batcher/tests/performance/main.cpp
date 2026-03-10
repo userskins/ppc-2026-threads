@@ -2,10 +2,12 @@
 
 #include <algorithm>
 #include <chrono>
+#include <cstddef>
 #include <random>
 #include <vector>
 
 #include "gusev_d_double_sort_even_odd_batcher/seq/include/ops_seq.hpp"
+#include "performance/include/performance.hpp"
 #include "util/include/perf_test_util.hpp"
 
 namespace gusev_d_double_sort_even_odd_batcher_task_threads {
@@ -13,13 +15,13 @@ namespace gusev_d_double_sort_even_odd_batcher_task_threads {
 class PerfTestBaseSEQ : public ppc::util::BaseRunPerfTests<InType, OutType> {
  protected:
   bool CheckTestOutputData(OutType &output_data) final {
-    auto expected = input_data_;
-    std::sort(expected.begin(), expected.end());
+    auto expected = input_data;
+    std::ranges::sort(expected);
     return output_data == expected;
   }
 
   InType GetTestInputData() final {
-    return input_data_;
+    return input_data;
   }
 
   void SetPerfAttributes(ppc::performance::PerfAttr &perf_attrs) override {
@@ -31,16 +33,15 @@ class PerfTestBaseSEQ : public ppc::util::BaseRunPerfTests<InType, OutType> {
     };
   }
 
- protected:
-  InType input_data_{};
+  InType input_data;
 };
 
 class RunPerfTestSEQDescending : public PerfTestBaseSEQ {
  protected:
   void SetUp() override {
-    input_data_.resize(2000);
-    for (size_t i = 0; i < input_data_.size(); ++i) {
-      input_data_[i] = static_cast<double>(input_data_.size() - i) + (static_cast<double>(i % 7) * 0.01);
+    input_data.resize(2000);
+    for (size_t i = 0; i < input_data.size(); ++i) {
+      input_data[i] = static_cast<double>(input_data.size() - i) + (static_cast<double>(i % 7) * 0.01);
     }
   }
 };
@@ -48,10 +49,11 @@ class RunPerfTestSEQDescending : public PerfTestBaseSEQ {
 class RunPerfTestSEQRandom : public PerfTestBaseSEQ {
  protected:
   void SetUp() override {
-    input_data_.resize(3000);
-    std::mt19937_64 gen(20260308);
+    input_data.resize(3000);
+    std::random_device rd;
+    std::mt19937_64 gen(rd());
     std::uniform_real_distribution<double> dist(-1000000.0, 1000000.0);
-    for (double &value : input_data_) {
+    for (double &value : input_data) {
       value = dist(gen);
     }
   }
@@ -60,14 +62,14 @@ class RunPerfTestSEQRandom : public PerfTestBaseSEQ {
 class RunPerfTestSEQNearlySorted : public PerfTestBaseSEQ {
  protected:
   void SetUp() override {
-    input_data_.resize(3500);
-    for (size_t i = 0; i < input_data_.size(); ++i) {
-      input_data_[i] = static_cast<double>(i) * 0.25;
+    input_data.resize(3500);
+    for (size_t i = 0; i < input_data.size(); ++i) {
+      input_data[i] = static_cast<double>(i) * 0.25;
     }
 
     // Slightly perturb a sorted sequence to emulate realistic near-sorted input.
-    for (size_t i = 0; i + 20 < input_data_.size(); i += 25) {
-      std::swap(input_data_[i], input_data_[i + 20]);
+    for (size_t i = 0; i + 20 < input_data.size(); i += 25) {
+      std::swap(input_data[i], input_data[i + 20]);
     }
   }
 };

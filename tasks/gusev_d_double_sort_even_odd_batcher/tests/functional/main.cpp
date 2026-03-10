@@ -2,7 +2,9 @@
 
 #include <algorithm>
 #include <cstddef>
+#include <cstdint>
 #include <limits>
+#include <numbers>
 #include <random>
 #include <stdexcept>
 #include <vector>
@@ -12,24 +14,27 @@
 namespace gusev_d_double_sort_even_odd_batcher_task_threads {
 namespace {
 
+bool RunTaskPipeline(DoubleSortEvenOddBatcherSEQ &task) {
+  return task.Validation() && task.PreProcessing() && task.Run() && task.PostProcessing();
+}
+
 OutType RunTask(const InType &input) {
   DoubleSortEvenOddBatcherSEQ task(input);
-  EXPECT_TRUE(task.Validation());
-  EXPECT_TRUE(task.PreProcessing());
-  EXPECT_TRUE(task.Run());
-  EXPECT_TRUE(task.PostProcessing());
+  if (!RunTaskPipeline(task)) {
+    throw std::runtime_error("Task pipeline failed");
+  }
   return task.GetOutput();
 }
 
 void CheckSortedPermutation(const InType &input, const OutType &output) {
   ASSERT_EQ(output.size(), input.size());
-  EXPECT_TRUE(std::is_sorted(output.begin(), output.end()));
-  EXPECT_TRUE(std::is_permutation(output.begin(), output.end(), input.begin(), input.end()));
+  EXPECT_TRUE(std::ranges::is_sorted(output));
+  EXPECT_TRUE(std::ranges::is_permutation(output, input));
 }
 
 void CheckMatchesStdSort(const InType &input, const OutType &output) {
   auto expected = input;
-  std::sort(expected.begin(), expected.end());
+  std::ranges::sort(expected);
   EXPECT_EQ(output, expected);
 }
 
@@ -41,6 +46,72 @@ InType GenerateRandomInput(size_t size, uint64_t seed) {
     value = dist(gen);
   }
   return data;
+}
+
+template <typename Callback>
+bool ThrowsRuntimeError(Callback callback) {
+  try {
+    callback();
+  } catch (const std::runtime_error &) {
+    return true;
+  }
+  return false;
+}
+
+bool ValidationFailsWhenOutputPrepared() {
+  const InType input{3.0, 1.0, 2.0};
+  DoubleSortEvenOddBatcherSEQ task(input);
+  task.GetOutput() = {42.0};
+  return !task.Validation() && ThrowsRuntimeError([&task] { task.Run(); });
+}
+
+bool PreProcessingBeforeValidationThrows() {
+  const InType input{1.0, 0.0};
+  DoubleSortEvenOddBatcherSEQ task(input);
+  return ThrowsRuntimeError([&task] { task.PreProcessing(); });
+}
+
+bool RunBeforePreProcessingThrows() {
+  const InType input{1.0, 0.0};
+  DoubleSortEvenOddBatcherSEQ task(input);
+  if (!task.Validation()) {
+    return false;
+  }
+  return ThrowsRuntimeError([&task] { task.Run(); });
+}
+
+bool PostProcessingBeforeRunThrows() {
+  const InType input{1.0, 0.0};
+  DoubleSortEvenOddBatcherSEQ task(input);
+  if (!task.Validation() || !task.PreProcessing()) {
+    return false;
+  }
+  return ThrowsRuntimeError([&task] { task.PostProcessing(); });
+}
+
+bool RunTaskTwiceBeforePostProcessing(const InType &input, OutType &output) {
+  DoubleSortEvenOddBatcherSEQ task(input);
+  if (!task.Validation() || !task.PreProcessing() || !task.Run() || !task.Run() || !task.PostProcessing()) {
+    return false;
+  }
+  output = task.GetOutput();
+  return true;
+}
+
+bool RunTaskWithInputSnapshot(const InType &original_input, const InType &replacement_input, OutType &output) {
+  DoubleSortEvenOddBatcherSEQ task(original_input);
+  if (!task.Validation() || !task.PreProcessing()) {
+    return false;
+  }
+
+  task.GetInput() = replacement_input;
+
+  if (!task.Run() || !task.PostProcessing()) {
+    return false;
+  }
+
+  output = task.GetOutput();
+  return true;
 }
 
 TEST(GusevDoubleSortEvenOddBatcherSEQ, HandlesEmptyVector) {
@@ -132,62 +203,36 @@ TEST(GusevDoubleSortEvenOddBatcherSEQ, SortsExtremeValues) {
 }
 
 TEST(GusevDoubleSortEvenOddBatcherSEQ, ValidationFailsWhenOutputAlreadyPrepared) {
-  const InType input{3.0, 1.0, 2.0};
-  DoubleSortEvenOddBatcherSEQ task(input);
-  task.GetOutput() = {42.0};
-  EXPECT_FALSE(task.Validation());
-  EXPECT_THROW(task.Run(), std::runtime_error);
+  EXPECT_TRUE(ValidationFailsWhenOutputPrepared());
 }
 
 TEST(GusevDoubleSortEvenOddBatcherSEQ, ThrowsIfPreProcessingCalledBeforeValidation) {
-  const InType input{1.0, 0.0};
-  DoubleSortEvenOddBatcherSEQ task(input);
-  EXPECT_THROW(task.PreProcessing(), std::runtime_error);
+  EXPECT_TRUE(PreProcessingBeforeValidationThrows());
 }
 
 TEST(GusevDoubleSortEvenOddBatcherSEQ, ThrowsIfRunCalledBeforePreProcessing) {
-  const InType input{1.0, 0.0};
-  DoubleSortEvenOddBatcherSEQ task(input);
-  EXPECT_TRUE(task.Validation());
-  EXPECT_THROW(task.Run(), std::runtime_error);
+  EXPECT_TRUE(RunBeforePreProcessingThrows());
 }
 
 TEST(GusevDoubleSortEvenOddBatcherSEQ, ThrowsIfPostProcessingCalledBeforeRun) {
-  const InType input{1.0, 0.0};
-  DoubleSortEvenOddBatcherSEQ task(input);
-  EXPECT_TRUE(task.Validation());
-  EXPECT_TRUE(task.PreProcessing());
-  EXPECT_THROW(task.PostProcessing(), std::runtime_error);
+  EXPECT_TRUE(PostProcessingBeforeRunThrows());
 }
 
 TEST(GusevDoubleSortEvenOddBatcherSEQ, AllowsRepeatedRunBeforePostProcessing) {
   const InType input = GenerateRandomInput(333, 20260310);
   const auto reference_output = RunTask(input);
 
-  DoubleSortEvenOddBatcherSEQ task(input);
-  ASSERT_TRUE(task.Validation());
-  ASSERT_TRUE(task.PreProcessing());
-  ASSERT_TRUE(task.Run());
-  ASSERT_TRUE(task.Run());
-  ASSERT_TRUE(task.PostProcessing());
-
-  const auto repeated_run_output = task.GetOutput();
+  OutType repeated_run_output;
+  ASSERT_TRUE(RunTaskTwiceBeforePostProcessing(input, repeated_run_output));
   CheckSortedPermutation(input, repeated_run_output);
   EXPECT_EQ(repeated_run_output, reference_output);
 }
 
 TEST(GusevDoubleSortEvenOddBatcherSEQ, UsesInputSnapshotFromPreProcessing) {
   const InType original_input{9.0, -1.0, 4.0, 2.0, -5.0, 3.0};
-
-  DoubleSortEvenOddBatcherSEQ task(original_input);
-  ASSERT_TRUE(task.Validation());
-  ASSERT_TRUE(task.PreProcessing());
-
-  task.GetInput() = {-1000.0, -2000.0, -3000.0};
-
-  ASSERT_TRUE(task.Run());
-  ASSERT_TRUE(task.PostProcessing());
-  CheckMatchesStdSort(original_input, task.GetOutput());
+  OutType output;
+  ASSERT_TRUE(RunTaskWithInputSnapshot(original_input, {-1000.0, -2000.0, -3000.0}, output));
+  CheckMatchesStdSort(original_input, output);
 }
 
 TEST(GusevDoubleSortEvenOddBatcherSEQ, SortsPrimeSizeDeterministicRandomAndMatchesStdSort) {
@@ -198,8 +243,8 @@ TEST(GusevDoubleSortEvenOddBatcherSEQ, SortsPrimeSizeDeterministicRandomAndMatch
 
 TEST(GusevDoubleSortEvenOddBatcherSEQ, SortsInterleavedLargeAndTinyMagnitudes) {
   const InType input{
-      1.0e308,   -1.0e308,   1.0e-308, -1.0e-308, 5.0e307, -5.0e307, 7.5e-309, -7.5e-309,
-      3.1415926, -2.7182818, 0.0,      -0.0,      42.0,    -42.0,    9.0e307,  -9.0e307,
+      1.0e308,          -1.0e308,         1.0e-308, -1.0e-308, 5.0e307, -5.0e307, 7.5e-309, -7.5e-309,
+      std::numbers::pi, -std::numbers::e, 0.0,      -0.0,      42.0,    -42.0,    9.0e307,  -9.0e307,
   };
   const auto output = RunTask(input);
   CheckMatchesStdSort(input, output);

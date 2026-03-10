@@ -23,8 +23,8 @@ class DoubleSortEvenOddBatcherSEQ : public BaseTask {
   bool RunImpl() override;
   bool PostProcessingImpl() override;
 
-  InType input_data_{};
-  OutType result_data_{};
+  InType input_data_;
+  OutType result_data_;
 };
 
 }  // namespace gusev_d_double_sort_even_odd_batcher_task_threads

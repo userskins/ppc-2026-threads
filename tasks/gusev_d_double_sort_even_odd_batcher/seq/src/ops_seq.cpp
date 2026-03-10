@@ -11,7 +11,7 @@
 namespace {
 
 uint64_t DoubleToSortableKey(double value) {
-  const uint64_t bits = std::bit_cast<uint64_t>(value);
+  const auto bits = std::bit_cast<uint64_t>(value);
   const uint64_t sign_mask = 0x8000000000000000ULL;
   return (bits & sign_mask) == 0 ? (bits ^ sign_mask) : (~bits);
 }
@@ -30,8 +30,8 @@ void RadixSortDoubles(std::vector<double> &data) {
     const int shift = byte * 8;
 
     for (double value : *src) {
-      const uint8_t bucket = static_cast<uint8_t>((DoubleToSortableKey(value) >> shift) & 0xFFULL);
-      count[bucket]++;
+      const auto bucket = static_cast<uint8_t>((DoubleToSortableKey(value) >> shift) & 0xFFULL);
+      count.at(bucket)++;
     }
 
     size_t prefix = 0;
@@ -42,8 +42,9 @@ void RadixSortDoubles(std::vector<double> &data) {
     }
 
     for (double value : *src) {
-      const uint8_t bucket = static_cast<uint8_t>((DoubleToSortableKey(value) >> shift) & 0xFFULL);
-      (*dst)[count[bucket]++] = value;
+      const auto bucket = static_cast<uint8_t>((DoubleToSortableKey(value) >> shift) & 0xFFULL);
+      const auto position = count.at(bucket)++;
+      dst->at(position) = value;
     }
 
     std::swap(src, dst);
@@ -51,6 +52,45 @@ void RadixSortDoubles(std::vector<double> &data) {
 
   if (src != &data) {
     data = *src;
+  }
+}
+
+void SplitByGlobalParity(const std::vector<double> &source, size_t global_offset, std::vector<double> &even_values,
+                         std::vector<double> &odd_values) {
+  for (size_t i = 0; i < source.size(); ++i) {
+    if (((global_offset + i) % 2) == 0) {
+      even_values.push_back(source[i]);
+    } else {
+      odd_values.push_back(source[i]);
+    }
+  }
+}
+
+std::vector<double> InterleaveEvenOdd(const std::vector<double> &even_values, const std::vector<double> &odd_values,
+                                      size_t total_size) {
+  std::vector<double> result(total_size);
+  size_t even_idx = 0;
+  size_t odd_idx = 0;
+
+  for (size_t i = 0; i < total_size; ++i) {
+    if ((i % 2) == 0) {
+      result[i] = even_values[even_idx++];
+    } else {
+      result[i] = odd_values[odd_idx++];
+    }
+  }
+
+  return result;
+}
+
+void OddEvenFinalize(std::vector<double> &data) {
+  for (size_t phase = 0; phase < data.size(); ++phase) {
+    const size_t start = phase % 2;
+    for (size_t i = start; i + 1 < data.size(); i += 2) {
+      if (data[i] > data[i + 1]) {
+        std::swap(data[i], data[i + 1]);
+      }
+    }
   }
 }
 
@@ -65,49 +105,19 @@ std::vector<double> MergeBatcherEvenOdd(const std::vector<double> &left, const s
   right_even.reserve((right.size() + 1) / 2);
   right_odd.reserve(right.size() / 2);
 
-  for (size_t i = 0; i < left.size(); ++i) {
-    if ((i % 2) == 0) {
-      left_even.push_back(left[i]);
-    } else {
-      left_odd.push_back(left[i]);
-    }
-  }
-  for (size_t i = 0; i < right.size(); ++i) {
-    if (((left.size() + i) % 2) == 0) {
-      right_even.push_back(right[i]);
-    } else {
-      right_odd.push_back(right[i]);
-    }
-  }
+  SplitByGlobalParity(left, 0, left_even, left_odd);
+  SplitByGlobalParity(right, left.size(), right_even, right_odd);
 
   std::vector<double> merged_even;
   std::vector<double> merged_odd;
   merged_even.reserve(left_even.size() + right_even.size());
   merged_odd.reserve(left_odd.size() + right_odd.size());
 
-  std::merge(left_even.begin(), left_even.end(), right_even.begin(), right_even.end(), std::back_inserter(merged_even));
-  std::merge(left_odd.begin(), left_odd.end(), right_odd.begin(), right_odd.end(), std::back_inserter(merged_odd));
+  std::ranges::merge(left_even, right_even, std::back_inserter(merged_even));
+  std::ranges::merge(left_odd, right_odd, std::back_inserter(merged_odd));
 
-  std::vector<double> result(total_size);
-  size_t even_idx = 0;
-  size_t odd_idx = 0;
-  for (size_t i = 0; i < total_size; ++i) {
-    if ((i % 2) == 0) {
-      result[i] = merged_even[even_idx++];
-    } else {
-      result[i] = merged_odd[odd_idx++];
-    }
-  }
-
-  for (size_t phase = 0; phase < total_size; ++phase) {
-    const size_t start = phase % 2;
-    for (size_t i = start; i + 1 < total_size; i += 2) {
-      if (result[i] > result[i + 1]) {
-        std::swap(result[i], result[i + 1]);
-      }
-    }
-  }
-
+  auto result = InterleaveEvenOdd(merged_even, merged_odd, total_size);
+  OddEvenFinalize(result);
   return result;
 }
 
