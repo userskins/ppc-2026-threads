@@ -1,7 +1,13 @@
 #include <gtest/gtest.h>
 
-#include <stdexcept>
+#include <algorithm>
+#include <chrono>
+#include <cstddef>
+#include <cstdint>
+#include <iostream>
+#include <random>
 #include <string>
+#include <utility>
 
 #include "gusev_d_double_sort_even_odd_batcher_tbb/common/include/common.hpp"
 #include "gusev_d_double_sort_even_odd_batcher_tbb/tbb/include/ops_tbb.hpp"
@@ -11,29 +17,122 @@ namespace {
 using gusev_d_double_sort_even_odd_batcher_tbb_task_threads::DoubleSortEvenOddBatcherTBB;
 using gusev_d_double_sort_even_odd_batcher_tbb_task_threads::InType;
 using gusev_d_double_sort_even_odd_batcher_tbb_task_threads::OutType;
+using gusev_d_double_sort_even_odd_batcher_tbb_task_threads::ValueType;
+
+constexpr size_t kPerfInputSize = 1 << 13;
+
+struct PerfRunResult {
+  bool ok = false;
+  const char *failed_stage = "";
+  OutType output;
+  std::chrono::duration<double> elapsed{};
+
+  static PerfRunResult MakeFailure(const char *stage) {
+    PerfRunResult result;
+    result.failed_stage = stage;
+    return result;
+  }
+
+  static PerfRunResult MakeSuccess(OutType result_output, std::chrono::duration<double> result_elapsed) {
+    PerfRunResult result;
+    result.ok = true;
+    result.output = std::move(result_output);
+    result.elapsed = result_elapsed;
+    return result;
+  }
+};
 
 class GusevDoubleSortEvenOddBatcherTbbEnabledPerf : public ::testing::TestWithParam<int> {};
 
-OutType RunTaskPipeline(const InType &input) {
-  DoubleSortEvenOddBatcherTBB task(input);
-  if (!task.Validation()) {
-    throw std::runtime_error("Validation failed");
-  }
-  if (!task.PreProcessing()) {
-    throw std::runtime_error("PreProcessing failed");
-  }
-  if (!task.Run()) {
-    throw std::runtime_error("Run failed");
-  }
-  if (!task.PostProcessing()) {
-    throw std::runtime_error("PostProcessing failed");
+InType GenerateRandomInput(size_t size, uint64_t seed) {
+  std::mt19937_64 generator(seed);
+  std::uniform_real_distribution<ValueType> distribution(-1.0e6, 1.0e6);
+
+  InType input(size);
+  for (ValueType &value : input) {
+    value = distribution(generator);
   }
 
-  return task.GetOutput();
+  return input;
 }
 
-TEST_P(GusevDoubleSortEvenOddBatcherTbbEnabledPerf, RunPerfTestTBBSkeleton) {
-  EXPECT_EQ(RunTaskPipeline({1.0, 2.0, 3.0}), (OutType{1.0, 2.0, 3.0}));
+InType GenerateDescendingInput(size_t size) {
+  InType input(size);
+  for (size_t i = 0; i < size; ++i) {
+    input[i] = static_cast<ValueType>(size - i);
+  }
+
+  return input;
+}
+
+InType GenerateNearlySortedInput(size_t size) {
+  InType input(size);
+  for (size_t i = 0; i < size; ++i) {
+    input[i] = static_cast<ValueType>(i);
+  }
+
+  for (size_t i = 1; i < size; i += 64) {
+    std::swap(input[i - 1], input[i]);
+  }
+
+  return input;
+}
+
+InType GenerateDuplicateHeavyInput(size_t size) {
+  InType input(size);
+  for (size_t i = 0; i < size; ++i) {
+    input[i] = static_cast<ValueType>((i % 17) - 8);
+  }
+
+  return input;
+}
+
+PerfRunResult ExecutePerfCase(const InType &input) {
+  DoubleSortEvenOddBatcherTBB task(input);
+  if (!task.Validation()) {
+    return PerfRunResult::MakeFailure("Validation");
+  }
+  if (!task.PreProcessing()) {
+    return PerfRunResult::MakeFailure("PreProcessing");
+  }
+
+  const auto started = std::chrono::steady_clock::now();
+  if (!task.Run()) {
+    return PerfRunResult::MakeFailure("Run");
+  }
+  const auto finished = std::chrono::steady_clock::now();
+
+  if (!task.PostProcessing()) {
+    return PerfRunResult::MakeFailure("PostProcessing");
+  }
+
+  return PerfRunResult::MakeSuccess(task.GetOutput(), std::chrono::duration<double>(finished - started));
+}
+
+void RunPerfCase(const InType &input) {
+  auto expected = input;
+  std::ranges::sort(expected);
+
+  const auto result = ExecutePerfCase(input);
+  ASSERT_TRUE(result.ok) << result.failed_stage;
+  EXPECT_EQ(result.output, expected);
+  std::cout << "tbb_run_time_sec:" << result.elapsed.count() << '\n';
+}
+
+TEST_P(GusevDoubleSortEvenOddBatcherTbbEnabledPerf, RunPerfTestTBBDescending) {
+  RunPerfCase(GenerateDescendingInput(kPerfInputSize));
+}
+
+TEST_P(GusevDoubleSortEvenOddBatcherTbbEnabledPerf, RunPerfTestTBBRandom) {
+  RunPerfCase(GenerateRandomInput(kPerfInputSize, 20260320));
+}
+
+TEST_P(GusevDoubleSortEvenOddBatcherTbbEnabledPerf, RunPerfTestTBBNearlySorted) {
+  RunPerfCase(GenerateNearlySortedInput(kPerfInputSize));
+}
+
+TEST_P(GusevDoubleSortEvenOddBatcherTbbEnabledPerf, RunPerfTestTBBDuplicateHeavy) {
+  RunPerfCase(GenerateDuplicateHeavyInput(kPerfInputSize));
 }
 
 std::string PrintTbbPerformanceParamName(const ::testing::TestParamInfo<int> &info) {
@@ -41,8 +140,7 @@ std::string PrintTbbPerformanceParamName(const ::testing::TestParamInfo<int> &in
   return "enabled";
 }
 
-INSTANTIATE_TEST_SUITE_P(gusev_d_double_sort_even_odd_batcher_tbb_perf,
-                         GusevDoubleSortEvenOddBatcherTbbEnabledPerf, ::testing::Values(0),
-                         PrintTbbPerformanceParamName);
+INSTANTIATE_TEST_SUITE_P(gusev_d_double_sort_even_odd_batcher_tbb_perf, GusevDoubleSortEvenOddBatcherTbbEnabledPerf,
+                         ::testing::Values(0), PrintTbbPerformanceParamName);
 
 }  // namespace
