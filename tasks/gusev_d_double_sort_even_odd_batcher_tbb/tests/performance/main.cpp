@@ -5,6 +5,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <iostream>
+#include <libenvpp/detail/environment.hpp>
 #include <random>
 #include <string>
 #include <utility>
@@ -43,6 +44,14 @@ struct PerfRunResult {
 };
 
 class GusevDoubleSortEvenOddBatcherTbbEnabledPerf : public ::testing::TestWithParam<int> {};
+
+class TbbThreadCountGuard {
+ public:
+  explicit TbbThreadCountGuard(int thread_count) : scoped_("PPC_NUM_THREADS", std::to_string(thread_count)) {}
+
+ private:
+  env::detail::set_scoped_environment_variable scoped_;
+};
 
 InType GenerateRandomInput(size_t size, uint64_t seed) {
   std::mt19937_64 generator(seed);
@@ -133,6 +142,11 @@ TEST_P(GusevDoubleSortEvenOddBatcherTbbEnabledPerf, RunPerfTestTBBNearlySorted) 
 
 TEST_P(GusevDoubleSortEvenOddBatcherTbbEnabledPerf, RunPerfTestTBBDuplicateHeavy) {
   RunPerfCase(GenerateDuplicateHeavyInput(kPerfInputSize));
+}
+
+TEST_P(GusevDoubleSortEvenOddBatcherTbbEnabledPerf, RunPerfTestTBBForcedThreadCount) {
+  const TbbThreadCountGuard guard(4);
+  RunPerfCase(GenerateRandomInput(kPerfInputSize, 20260324));
 }
 
 std::string PrintTbbPerformanceParamName(const ::testing::TestParamInfo<int> &info) {

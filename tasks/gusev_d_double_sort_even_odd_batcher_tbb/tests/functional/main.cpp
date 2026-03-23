@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cstddef>
 #include <cstdint>
+#include <libenvpp/detail/environment.hpp>
 #include <limits>
 #include <numbers>
 #include <random>
@@ -60,6 +61,14 @@ InType MakeAlternatingMagnitudeInput() {
 }
 
 class GusevDoubleSortEvenOddBatcherTbbEnabled : public ::testing::TestWithParam<int> {};
+
+class TbbThreadCountGuard {
+ public:
+  explicit TbbThreadCountGuard(int thread_count) : scoped_("PPC_NUM_THREADS", std::to_string(thread_count)) {}
+
+ private:
+  env::detail::set_scoped_environment_variable scoped_;
+};
 
 OutType RunTaskPipeline(const InType &input) {
   DoubleSortEvenOddBatcherTBB task(input);
@@ -216,8 +225,23 @@ TEST_P(GusevDoubleSortEvenOddBatcherTbbEnabled, MatchesStdSortForAlternatingMagn
   CheckMatchesStdSort(MakeAlternatingMagnitudeInput());
 }
 
-TEST_P(GusevDoubleSortEvenOddBatcherTbbEnabled, MatchesStdSortForSmallRandomInput) {
+TEST_P(GusevDoubleSortEvenOddBatcherTbbEnabled, MatchesStdSortWhenInputSizeIsLessThanThreadCount) {
+  const TbbThreadCountGuard guard(8);
+  CheckMatchesStdSort({7.0, -4.0, 2.5});
+}
+
+TEST_P(GusevDoubleSortEvenOddBatcherTbbEnabled, MatchesStdSortForOddNumberOfBlocks) {
+  const TbbThreadCountGuard guard(5);
   CheckMatchesStdSort(GenerateRandomInput(23, 20260322));
+}
+
+TEST_P(GusevDoubleSortEvenOddBatcherTbbEnabled, MatchesStdSortForParallelMergeWithOddCarryBlock) {
+  const TbbThreadCountGuard guard(65);
+  CheckMatchesStdSort(GenerateRandomInput(65, 20260325));
+}
+
+TEST_P(GusevDoubleSortEvenOddBatcherTbbEnabled, MatchesStdSortForSmallRandomInput) {
+  CheckMatchesStdSort(GenerateRandomInput(23, 20260323));
 }
 
 TEST_P(GusevDoubleSortEvenOddBatcherTbbEnabled, ValidationRejectsPreparedOutput) {
